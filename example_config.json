@@ -1,0 +1,7 @@
+{
+  "_note": "conn_str set to use a local vagrant database. Change to production database.",
+  "conn_str": "postgresql://vagrant:vagrant@localhost:5432/vagrant",
+  "_note2": "api_name is not required for operation - simply for documentation",
+  "smashgg_api_name": "my-script-name",
+  "smashgg_api_token": "<api-token>"
+}
