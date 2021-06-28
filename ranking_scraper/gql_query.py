@@ -46,14 +46,8 @@ class GraphQLQuery(object):
 
     f = fld = field  # Shortcut definitions
 
-    def fields(self, field_names):
-        """
-        Convenience method to specify multiple fields.
-
-        :param field_names:
-        :type field_names: typing.List
-        :return:
-        """
+    def fields(self, *field_names):
+        """ Convenience method to specify multiple fields. """
         for f in field_names:
             self.field(name=f)
 
@@ -63,6 +57,25 @@ class GraphQLQuery(object):
         if isinstance(item, str):
             return item in self._fields
         return item in self._fields.values()
+
+    def __repr__(self):
+        """ A basic representation of the query. """
+        # TODO: Implementation assumes '(', ')', '{', and '}' are not present within data!
+        # TODO: Implementation not adjustable
+        q_str = self.build()
+        q_str = q_str.replace('{', '{\n').replace('}', '\n}').replace(',', ',\n')
+            # .replace('(', '(\n').replace(')', ')\n')
+        lines = q_str.split('\n')
+        indent = 0
+        new_lines = list()
+        for line in lines:
+            # Remove indentation __before__ print if end of indentation
+            if line.startswith('}'):
+                indent -= 2
+            new_lines.append(f'{" "*indent}{line}')
+            if line.endswith('{'):
+                indent += 2
+        return '\n'.join(new_lines)
 
 
 class GraphQLField(object):
@@ -85,14 +98,8 @@ class GraphQLField(object):
 
     f = fld = field  # Shortcut definitions
 
-    def fields(self, field_names):
-        """
-        Convenience method to specify multiple fields.
-
-        :param field_names:
-        :type field_names: typing.List
-        :return:
-        """
+    def fields(self, *field_names):
+        """ Convenience method to specify multiple fields. """
         for f in field_names:
             self.field(name=f)
 
@@ -196,18 +203,19 @@ def test_run():
                                                               day=1).timestamp()))
                            )) \
         .field('nodes') \
-        .fields(['id',
+        .fields('id',
                  'name',
                  'countryCode',
-                 'endAt'])
-    query.field('tournaments').f('nodes').f('events').fields(['id',
+                 'endAt')
+    query.field('tournaments').f('nodes').f('events').fields('id',
                                                               'name',
                                                               'isOnline',
                                                               'numEntrants',
                                                               'state',
-                                                              'type'])
+                                                              'type')
     query.f('tournaments').f('nodes').f('events').f('videogame').f('id')
     print(query.build())
+    print(query)
     # --- Basic lookup
     # query = GraphQLQuery()
     # query.field('player').params(id=642186).field('gamerTag')
