@@ -37,7 +37,8 @@ class SmashGGScraper(Scraper):
         :type include_metadata: bool
 
         :return: The response data in dictionary format (parsed as json). The response metadata
-         is not returned unless "include_metadata" is set to True.
+         is not returned unless "include_metadata" is set to True. In such a case, any data is
+         under the "data" key. (effectively, the response is returned as-is).
         :rtype: dict
         """
         params = params or dict()
@@ -46,7 +47,7 @@ class SmashGGScraper(Scraper):
         result = json.loads(result)
         # Ignore metadata and just return the requested data.
         try:
-            return result["data"]
+            return result if include_metadata else result["data"]
         except KeyError:
             _l.error(f'Result did not contain "data" key. Result is: {result}')
             raise
