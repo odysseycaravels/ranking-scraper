@@ -52,7 +52,7 @@ Database commands.
               help='Include all debugging messages.')
 def db(command, force, log_level):
     log_level = log_level or logging.WARNING
-    configure_logging(log_level)
+    configure_logging(log_level=log_level)
     conn_str = get_connection_str()
     if not force and not click.confirm(f'Run "{command}" against "{conn_str}"?'):
         return
