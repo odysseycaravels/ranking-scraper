@@ -10,7 +10,7 @@
 # Below is probably not necessary since we can just use our builder to do these
 # 6. Variable inserts
 # 7. Directives
-
+import copy
 import typing
 from datetime import datetime
 from pprint import pprint as pp
@@ -24,6 +24,11 @@ class GraphQLQuery(object):
         """
         self.query_name = query_name
         self._fields: typing.Dict[str, GraphQLField] = dict()
+
+    def clone(self):
+        new_instance = GraphQLQuery(query_name=self.query_name)
+        new_instance._fields = {k: fld.clone() for k, fld in self._fields.items()}
+        return new_instance
 
     def build(self):
         """
@@ -70,7 +75,7 @@ class GraphQLQuery(object):
         # TODO: Implementation not adjustable
         q_str = self.build()
         q_str = q_str.replace('{', '{\n').replace('}', '\n}').replace(',', ',\n')
-            # .replace('(', '(\n').replace(')', ')\n')
+        # .replace('(', '(\n').replace(')', ')\n')
         lines = q_str.split('\n')
         indent = 0
         new_lines = list()
@@ -78,7 +83,7 @@ class GraphQLQuery(object):
             # Remove indentation __before__ print if end of indentation
             if line.startswith('}'):
                 indent -= 2
-            new_lines.append(f'{" "*indent}{line}')
+            new_lines.append(f'{" " * indent}{line}')
             if line.endswith('{'):
                 indent += 2
         return '\n'.join(new_lines)
@@ -89,6 +94,12 @@ class GraphQLField(object):
         self.name = field_name
         self._fields = dict()
         self.params = dict()
+
+    def clone(self):
+        new_instance = GraphQLField(field_name=self.name)
+        new_instance._fields = {k: fld.clone() for k, fld in self._fields.items()}
+        new_instance.params = copy.deepcopy(self.params)
+        return new_instance
 
     def field(self, name):
         """
@@ -214,24 +225,24 @@ def test_run():
         .add_params(query=dict(page=1,
                                perPage=25,
                                filter=dict(videogameIds=[1386],
-                                       hasOnlineEvents=False,
-                                       countryCode='BE',
-                                       upcoming=False,
-                                       afterDate=int(datetime(year=2019,
-                                                              month=1,
-                                                              day=1).timestamp()))
+                                           hasOnlineEvents=False,
+                                           countryCode='BE',
+                                           upcoming=False,
+                                           afterDate=int(datetime(year=2019,
+                                                                  month=1,
+                                                                  day=1).timestamp()))
                                )) \
         .field('nodes') \
         .add_fields('id',
-                 'name',
-                 'countryCode',
-                 'endAt')
+                    'name',
+                    'countryCode',
+                    'endAt')
     query.field('tournaments').f('nodes').f('events').add_fields('id',
-                                                              'name',
-                                                              'isOnline',
-                                                              'numEntrants',
-                                                              'state',
-                                                              'type')
+                                                                 'name',
+                                                                 'isOnline',
+                                                                 'numEntrants',
+                                                                 'state',
+                                                                 'type')
     query.f('tournaments').f('nodes').f('events').f('videogame').f('id')
     print(query.build())
     print(query)
