@@ -1,6 +1,13 @@
 # ranking-scraper
 Data scraping workers. Designed to be run on-demand or at intervals.
 
+## Requirements
+
+* Python 3.6+
+  - See requirements.txt
+  
+For psycopg2, you may have to build from source. See: https://www.psycopg.org/docs/install.html
+
 ## Setup
 
 0. Create a virtual environment
