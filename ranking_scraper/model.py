@@ -76,8 +76,8 @@ Base = declarative_base(cls=_Base)
 
 class EventState(Enum):
     UNVERIFIED = 0
-    VERIFIED_OK = 100
-    VERIFIED_DATA_INCOMPLETE = -1  # Too much set/player data is missing. This is fixable
+    VERIFIED_DATA_INCOMPLETE = -1  # Some set or player data is missing. This is usually manually fixable.
+    VERIFIED_OK = 100  # Event set data is retrieved with no issues (or is flagged as being OK).
     IGNORE = -99  # Event is not suitable. Eg. A squad strike event
 
 

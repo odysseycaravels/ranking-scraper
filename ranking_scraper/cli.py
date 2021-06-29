@@ -107,6 +107,7 @@ def scrape(provider, game, countries, from_datetime, to_datetime, log_level):
     scraper.pull_event_data(game_code=game, from_dt=from_datetime, to_dt=to_datetime,
                             countries=countries)
 
+# TODO: Command to populate set data for tournaments
 
 if __name__ == '__main__':
     cli()
