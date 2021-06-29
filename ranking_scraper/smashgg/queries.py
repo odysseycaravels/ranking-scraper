@@ -3,6 +3,31 @@ GraphQL queries in string form used by SmashGGScraper.
 """
 
 # TODO: This is lifted from the old project. Confirm these still work (will need some rework).
+from ranking_scraper.gql_query import GraphQLQuery
+
+
+def get_completed_tournaments_paging(game_id, items_per_page=25, country_code=None, from_date=None, to_date=None):
+    query = GraphQLQuery(query_name='TournamentsPaging')
+    # Field definitions
+    query.f('tournaments').f('pageInfo').add_fields('totalPages', 'perPage')
+    # Parameter definitions
+    query.f('tournaments').add_params(query={
+        'perPage': items_per_page,
+        'filter': {
+            'videogameIds': [game_id],
+            'upcoming': False
+        }
+    })
+    # Optional parameters
+    if country_code:
+        query.f('tournaments').params['query']['filter']['countryCode'] = country_code
+    if from_date:
+        query.f('tournaments').params['query']['filter']['afterDate'] = from_date
+    if to_date:
+        query.f('tournaments').params['query']['filter']['beforeDate'] = to_date
+    return query
+
+
 
 TOURNAMENTS_BY_COUNTRY_PAGING = """
 query TournamentsByCountryPaging($countryCode: String!, $afterDate: Timestamp!, $perPage: Int!) {
