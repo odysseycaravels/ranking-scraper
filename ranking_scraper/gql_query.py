@@ -47,9 +47,15 @@ class GraphQLQuery(object):
     f = fld = field  # Shortcut definitions
 
     def fields(self, *field_names):
-        """ Convenience method to specify multiple fields. """
+        """
+        Convenience method to specify multiple fields.
+
+        :return: This instance for method chaining.
+        :rtype: GraphQLQuery
+        """
         for f in field_names:
             self.field(name=f)
+        return self
 
     def __contains__(self, item):
         if not isinstance(item, (str, GraphQLField,)):
@@ -60,7 +66,7 @@ class GraphQLQuery(object):
 
     def __repr__(self):
         """ A basic representation of the query. """
-        # TODO: Implementation assumes '(', ')', '{', and '}' are not present within data!
+        # TODO: Implementation assumes ',', '{', and '}' are not present within data!
         # TODO: Implementation not adjustable
         q_str = self.build()
         q_str = q_str.replace('{', '{\n').replace('}', '\n}').replace(',', ',\n')
@@ -82,7 +88,7 @@ class GraphQLField(object):
     def __init__(self, field_name):
         self.name = field_name
         self._fields = dict()
-        self._params = dict()
+        self.params = dict()
 
     def field(self, name):
         """
@@ -98,14 +104,25 @@ class GraphQLField(object):
 
     f = fld = field  # Shortcut definitions
 
-    def fields(self, *field_names):
-        """ Convenience method to specify multiple fields. """
+    def add_fields(self, *field_names):
+        """
+        Convenience method to specify multiple fields.
+
+        :return: This instance for method chaining.
+        :rtype: GraphQLField
+        """
         for f in field_names:
             self.field(name=f)
+        return self
 
-    def params(self, **kwargs):
-        """ Set / update parameter values. Return this field for chaining. """
-        self._params.update(kwargs)
+    def add_params(self, **kwargs):
+        """
+        Set / update parameter values. Return this field for chaining.
+
+        :return: This instance for method chaining.
+        :rtype: GraphQLField
+        """
+        self.params.update(kwargs)
         return self
 
     def build(self):
@@ -115,9 +132,9 @@ class GraphQLField(object):
         :rtype: str
         """
         result = self.name
-        if self._params:
+        if self.params:
             param_string = ', '.join((f'{k}: {self._sanitize_value(v)}'
-                                      for k, v in self._params.items()))
+                                      for k, v in self.params.items()))
             result += '(' + param_string + ')'
         if not self._fields:
             return result
@@ -129,6 +146,7 @@ class GraphQLField(object):
         Return the correct string format of a value for use in a GraphQL query string.
         """
         # TODO: Add support for the other built-in types.
+        # TODO: None --> null?
         if isinstance(value, bool):  # Note: bool check must be before int/float!
             return f'{str(value).lower()}'
         if isinstance(value, (int, float)):
@@ -137,6 +155,7 @@ class GraphQLField(object):
             return f'[{", ".join(self._sanitize_value(v) for v in value)}]'
         if isinstance(value, dict):
             result = '{'
+            # TODO: Filter out None values?
             result += ", ".join(f'{k}: {self._sanitize_value(v)}' for k, v in value.items())
             result += '}'
             return result
@@ -192,22 +211,22 @@ def test_run():
     # --- Tournament page retrieval
     query = GraphQLQuery()
     query.field('tournaments') \
-        .params(query=dict(page=1,
-                           perPage=25,
-                           filter=dict(videogameIds=[1386],
+        .add_params(query=dict(page=1,
+                               perPage=25,
+                               filter=dict(videogameIds=[1386],
                                        hasOnlineEvents=False,
                                        countryCode='BE',
                                        upcoming=False,
                                        afterDate=int(datetime(year=2019,
                                                               month=1,
                                                               day=1).timestamp()))
-                           )) \
+                               )) \
         .field('nodes') \
-        .fields('id',
+        .add_fields('id',
                  'name',
                  'countryCode',
                  'endAt')
-    query.field('tournaments').f('nodes').f('events').fields('id',
+    query.field('tournaments').f('nodes').f('events').add_fields('id',
                                                               'name',
                                                               'isOnline',
                                                               'numEntrants',
