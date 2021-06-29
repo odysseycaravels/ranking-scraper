@@ -1,33 +1,17 @@
 import logging
-import time
 from datetime import datetime
 
 import click
 
 from ranking_scraper.db import get_session, get_connection_str, create_tables, renew_tables, \
     drop_tables
-from ranking_scraper.model import Game
 from ranking_scraper.smashgg.scraper import SmashGGScraper
 from ranking_scraper.smashgg.seeddb import upsert_smashgg_games
+from ranking_scraper.util import configure_logging
 
-logging.Formatter.converter = time.gmtime  # Use UTC time
 _log = logging.getLogger('ranking_scraper.cli')
 
 session = get_session()
-
-
-def _configure_logging(log_level=logging.WARNING):
-    logger = logging.getLogger('ranking_scraper')
-    cout = logging.StreamHandler()
-    if log_level == logging.DEBUG:
-        fmt = '%(asctime)s - [%(levelname)-7s] %(module)s:%(funcName)s - %(message)s'
-    else:
-        fmt = '%(asctime)s - [%(levelname)s] %(message)s'
-    formatter = logging.Formatter(fmt=fmt, datefmt='%y%m%dZ%H%M%S')
-    cout.setFormatter(formatter)
-    logger.setLevel(log_level)
-    cout.setLevel(log_level)
-    logger.addHandler(cout)
 
 
 @click.group()
@@ -68,7 +52,7 @@ Database commands.
               help='Include all debugging messages.')
 def db(command, force, log_level):
     log_level = log_level or logging.WARNING
-    _configure_logging(log_level)
+    configure_logging(log_level)
     conn_str = get_connection_str()
     if not force and not click.confirm(f'Run "{command}" against "{conn_str}"?'):
         return
@@ -96,6 +80,7 @@ scraper_cls_map = dict(smashgg=SmashGGScraper)
 @click.option('--countries', default='',
               help='A comma-separated list of country codes. Eg. "BE,NL,FR" .')
 @click.option('--from', 'from_datetime', type=click.DateTime(formats=('%Y%m%d', '%Y-%m-%d')),
+              default='',
               help='Date starting from which to scrape from (inclusive)')
 @click.option('--to', 'to_datetime', type=click.DateTime(formats=('%Y%m%d', '%Y-%m-%d')),
               default=datetime.utcnow(),
@@ -109,7 +94,7 @@ scraper_cls_map = dict(smashgg=SmashGGScraper)
               help='Include all debugging messages.')
 def scrape(provider, game, countries, from_datetime, to_datetime, log_level):
     log_level = log_level or logging.WARNING
-    _configure_logging(log_level)
+    configure_logging(log_level)
     countries = sorted(c for c in countries.split(',') if c)
     game = game.lower()
     _log.info('Logging started')
@@ -119,8 +104,8 @@ def scrape(provider, game, countries, from_datetime, to_datetime, log_level):
     _log.debug(f'from_datetime: {from_datetime}')
     _log.debug(f'to_datetime: {to_datetime}')
     scraper = scraper_cls_map[provider]()
-    scraper.pull_tournaments(game_code=game, from_dt=from_datetime, to_dt=to_datetime,
-                             countries=countries)
+    scraper.pull_event_data(game_code=game, from_dt=from_datetime, to_dt=to_datetime,
+                            countries=countries)
 
 
 if __name__ == '__main__':
