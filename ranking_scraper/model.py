@@ -118,8 +118,9 @@ class Event(Base):
     country = Column(Text, nullable=True)
     end_date = Column(DateTime, nullable=False)
     num_entrants = Column(Integer, nullable=False)
-    type_code = Column(Integer, nullable=False)
-    format_code = Column(Integer, nullable=False)
+    type_code = Column(Integer, nullable=False)  # See: EventType
+    format_code = Column(Integer, nullable=False)  # See: EventFormat
+    state_code = Column(Integer, nullable=False)  # See: EventState
 
     game_id = Column(Integer, ForeignKey('game.id'), nullable=False)
     game = relationship("Game", back_populates="events")
@@ -133,6 +134,10 @@ class Event(Base):
     @property
     def format(self):
         return EventFormat(self.format_code)
+
+    @property
+    def state(self):
+        return EventState(self.state_code).name
 
     @property
     def is_populated(self):
