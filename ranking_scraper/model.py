@@ -105,6 +105,8 @@ class Game(Base):
     code = Column(Text, nullable=False)  # TODO: validate: no spaces, all lower
     display_name = Column(Text, nullable=False)
 
+    events = relationship('Event', back_populates='game')
+
 
 class Event(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -118,6 +120,9 @@ class Event(Base):
     num_entrants = Column(Integer, nullable=False)
     type_code = Column(Integer, nullable=False)
     format_code = Column(Integer, nullable=False)
+
+    game_id = Column(Integer, ForeignKey('game.id'), nullable=False)
+    game = relationship("Game", back_populates="events")
 
     sets = relationship("Set", back_populates="event")
 
