@@ -6,7 +6,8 @@ GraphQL queries in string form used by SmashGGScraper.
 from ranking_scraper.gql_query import GraphQLQuery
 
 
-def get_completed_tournaments_paging(game_id, country_code=None, from_date=None, to_date=None, items_per_page=25):
+def get_completed_tournaments_paging(game_id, country_code=None, from_date=None, to_date=None,
+                                     items_per_page=25):
     """
     :param game_id: Smash.gg game id
 
@@ -65,12 +66,13 @@ query TournamentsByCountryPaging($countryCode: String!, $afterDate: Timestamp!, 
 """.strip()
 
 
-def get_completed_tournaments(game_id, page_nr, country_code=None, from_date=None, to_date=None, items_per_page=25):
+def get_completed_tournaments(game_id, page_nr, country_code=None, from_date=None, to_date=None,
+                              items_per_page=25):
     query = GraphQLQuery(query_name='TournamentsData')
     # Field definitions
     query.f('tournaments').f('nodes').add_fields('id', 'name', 'countryCode', 'endAt', 'events')
-    query.f('tournaments').f('nodes').f('events').add_fields('id', 'name', 'isOnline', 'numEntrants', 'state', 'type',
-                                                             'videogame')
+    query.f('tournaments').f('nodes').f('events') \
+        .add_fields('id', 'name', 'isOnline', 'numEntrants', 'state', 'type', 'videogame')
     query.f('tournaments').f('nodes').f('events').f('videogame').f('id')
     # Parameter definitions
     query.f('tournaments').add_params(query={

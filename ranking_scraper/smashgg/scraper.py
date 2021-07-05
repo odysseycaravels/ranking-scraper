@@ -3,11 +3,12 @@ import itertools
 import json
 import logging
 import time
+from datetime import datetime
 from urllib.error import HTTPError
 from pprint import pprint as pp
 from graphqlclient import GraphQLClient
 
-from ranking_scraper.model import Game, Event
+from ranking_scraper.model import Game, Event, EventState, EventFormat, EventType
 from ranking_scraper.smashgg import queries
 from ranking_scraper.config import get_config
 from ranking_scraper.scraper import Scraper
@@ -15,6 +16,9 @@ from ranking_scraper.scraper import Scraper
 _l = logging.getLogger(__name__)
 
 SMASHGG_API_ENDPOINT = 'https://api.smash.gg/gql/alpha'
+
+EVENT_TYPE_TO_FORMAT_MAP = {1: EventFormat.SINGLES.value,
+                            5: EventFormat.DOUBLES.value, }
 
 
 class SmashGGScraper(Scraper):
@@ -99,80 +103,155 @@ class SmashGGScraper(Scraper):
                 continue
 
     # Scraping methods
-    def pull_event_data(self, game_code, from_dt, to_dt, countries=None):
+    def pull_event_data(self, game_code, from_dt, to_dt=None, countries=None):
+        to_dt = to_dt or datetime.utcnow()
+        countries = countries or [None]  # Note: list of None, not just list
         game = self.session.query(Game).filter(Game.code == game_code).one()
         _l.info('### Retrieving event data ###')
-        countries = countries or [None]
-        tour_dicts = list()
+        found_events = list()
         for country_code in countries:
-            tour_dicts.extend(self._get_tournament_data(game.sgg_id, from_timestamp=from_dt, to_timestamp=to_dt,
-                                                        country_code=country_code))
+            found_events.extend(self._get_events(game,
+                                                 from_dt=from_dt,
+                                                 to_dt=to_dt,
+                                                 country_code=country_code))
         # 2. Check for any existing Event in database already (discard if existing).
-        new_tour_dicts = self._filter_out_known_tournaments(tour_dicts)
-        _l.info(f'Retrieved {len(tour_dicts)} tournaments, containing {len(new_tour_dicts)} new tournaments.')
-        # 3. Create new  Event instances
-        new_events = [_ for _ in itertools.chain(self._create_events_from_tournament_dict(td)
-                                                 for td in new_tour_dicts)]
+        new_events = self._filter_out_known_events(found_events)
+        _l.info(f'Retrieved {len(found_events)} events, containing {len(new_events)} new events. '
+                f'({len(found_events) - len(new_events)} events are already known)')
         self.session.add_all(new_events)
-        pp(new_events)
-        pp(len(new_events))
         _l.info('### Populated database with new Event instances ###')
-        # self.session.commit()
+        self.session.commit()
 
-    def _get_tournament_data(self, game_id, from_timestamp, to_timestamp, country_code=None):
-        from_timestamp = int(from_timestamp.timestamp())
-        to_timestamp = int(to_timestamp.timestamp())
-        _l.info(f'Retrieving tournament data for "{country_code if country_code else "all countries"}".')
-        _q = queries.get_completed_tournaments_paging(game_id=game_id, country_code=country_code,
-                                                      from_date=from_timestamp, to_date=to_timestamp)
+    def _get_events(self, game, from_dt, to_dt, country_code=None):
+        """
+        Fetches all events for a game from a specific time period.
+
+        Optionally limits the retrieval to a specific country.
+
+        :param game:
+        :type game: ranking_scraper.model.Game
+
+        :param from_dt:
+        :type from_dt: datetime.datetime
+
+        :param to_dt:
+        :type to_dt: datetime.datetime
+
+        :param country_code:
+        :type country_code: str
+
+        :return: A dictionary of events found in all tournaments that match the given criteria.
+        :rtype: list[Event]
+        """
+        from_dt = int(from_dt.timestamp())
+        to_dt = int(to_dt.timestamp())
+        _l.info(f'Retrieving tournament data for '
+                f'"{country_code if country_code else "all countries"}".')
+        _q = queries.get_completed_tournaments_paging(game_id=game.sgg_id,
+                                                      country_code=country_code,
+                                                      from_date=from_dt,
+                                                      to_date=to_dt)
         page_info = self.submit_request(query=_q)['tournaments']['pageInfo']
         tournament_dicts = list()
         for page_nr in range(1, page_info['totalPages'] + 1):
-            _l.debug(f'Retrieving page {page_nr} of {page_info["totalPages"]}')
-            _q = queries.get_completed_tournaments(game_id=game_id, page_nr=page_nr, country_code=country_code,
-                                                   from_date=from_timestamp, to_date=to_timestamp)
+            _l.info(f'Retrieving page {page_nr} of {page_info["totalPages"]}')
+            _q = queries.get_completed_tournaments(game_id=game.sgg_id,
+                                                   page_nr=page_nr,
+                                                   country_code=country_code,
+                                                   from_date=from_dt,
+                                                   to_date=to_dt)
             _nodes = self.submit_request(query=_q)['tournaments']['nodes']
             tournament_dicts.extend(_nodes)
         # Sanity check: duplicate tournament retrieval check
         if len({t['id'] for t in tournament_dicts}) != len(tournament_dicts):
-            _l.error(f'Duplicate tournament data retrieved! This is likely an error with the query. Skipping further '
-                     f'processing of these events. (Country code: {country_code}, # of events: {len(tournament_dicts)}')
+            _l.error(
+                f'Duplicate tournament data retrieved! This is likely an error with the query. '
+                f'Skipping further processing of these events. '
+                f'(Country code: {country_code}, # of tournaments: {len(tournament_dicts)}')
             return list()  # TODO: Perhaps safe to merge and process anyway?
-        return tournament_dicts
+        events_list = (self._create_events_from_tournament_dict(td, game)
+                       for td in tournament_dicts)
+        new_events = [_ for _ in itertools.chain(*events_list)]
+        return new_events
 
-    def _filter_out_known_tournaments(self, tournament_dicts):
-        tournament_ids = [t['id'] for t in tournament_dicts]
-        known_event_tournament_ids = {e.sgg_tournament_id for e in self.session.query(Event).all()}
-        # TODO: Needs to check on both tournament and event id (might pass a tournament again if we do a pass on
-        #  another game from the same tournament)
-        new_tournament_dicts = list()
-        for tour in tournament_dicts:
-            if tour['id'] in known_event_tournament_ids:
-                continue
-            new_tournament_dicts.append(tour)
-        return new_tournament_dicts
+    def _create_events_from_tournament_dict(self, tournament_dict, game):
+        """
 
-    def _create_events_from_tournament_dict(self, tournament_dict):
+        :param tournament_dict:
+        :param game:
+        :return:
+        :rtype: typing.List[Event]
+        """
         new_events = list()
-        pp(tournament_dict)
         for evt_data in tournament_dict['events']:
-            # TODO: Filter event on gamecode (pass in param) and other criteria (isonline, etc...).
+            event_fullname = f'{tournament_dict["name"]} / {evt_data["name"]}'
+            if evt_data['state'] != 'COMPLETED':
+                _l.debug(f'SKIPPING - event not completed ({event_fullname})')
+                continue
+            if evt_data['isOnline'] is True:
+                _l.debug(f'SKIPPING - event is online competition ({event_fullname})')
+                continue
+            if evt_data['videogame']['id'] != game.sgg_id:
+                _l.debug(f'SKIPPING - game mismatch ({event_fullname})')
+                continue
+            if not _validate_event_data(evt_data,
+                                        tournament_data=tournament_dict,
+                                        game=game,
+                                        event_fullname=event_fullname):
+                continue
+            event_format_code = EVENT_TYPE_TO_FORMAT_MAP.get(evt_data['type'],
+                                                             EventFormat.UNKNOWN.value)
             new_event = Event(sgg_tournament_id=tournament_dict['id'],
                               sgg_event_id=evt_data['id'],
-                              # TODO: rest of the values, see comment below
+                              game_id=game.id,
+                              name=event_fullname,
+                              country=tournament_dict['countryCode'],
+                              num_entrants=evt_data['numEntrants'],
+                              end_date=datetime.fromtimestamp(tournament_dict['endAt']),
+                              note='Added by SmashGGScraper',
+                              type_code=EventType.UNKNOWN.value,
+                              format_code=event_format_code,
+                              # TODO: Some events can auto-verify?
+                              state_code=EventState.UNVERIFIED.value,
                               )
             new_events.append(new_event)
-        """
-         id = Column(Integer, primary_key=True, autoincrement=True)
-    sgg_tournament_id = Column(Integer, nullable=True, index=True)  # smashgg tournament_id
-    sgg_event_id = Column(Integer, nullable=True, index=True)  # smashgg event_id
-    # Add other providers here (challonge, ...)
-    name = Column(Text, nullable=False)
-    note = Column(Text, nullable=True)  # Additional notes that can be given
-    country = Column(Text, nullable=True)
-    end_date = Column(DateTime, nullable=False)
-    num_entrants = Column(Integer, nullable=False)
-    type_code = Column(Integer, nullable=False)  # See: EventType
-    format_code = Column(Integer, nullable=False)  # See: EventFormat
-    state_code = Column(Integer, nullable=False)  # See: EventState"""
         return new_events
+
+    def _filter_out_known_events(self, events):
+        """
+
+        :param events:
+        :type events: typing.List[Event]
+
+        :return:
+        :rtype: typing.List[Event]
+        """
+        new_events = list()
+        tournament_ids = [evt.sgg_tournament_id for evt in events]
+        known_events = self.session.query(Event) \
+            .filter(Event.sgg_tournament_id.in_(tournament_ids)) \
+            .all()
+        known_events_ids = {(e.sgg_tournament_id, e.sgg_event_id,) for e in known_events}
+        for evt in events:
+            if (evt.sgg_tournament_id, evt.sgg_event_id,) in known_events_ids:
+                _l.debug(f'SKIPPING - event already known ({evt.name})')
+                continue
+            new_events.append(evt)
+        return new_events
+
+def _validate_event_data(event_data, tournament_data, game, event_fullname=None):
+    event_fullname = event_fullname or f'{tournament_data["name"]} / {event_data["name"]}'
+    if event_data['state'] != 'COMPLETED':
+        _l.debug(f'SKIPPING - event not completed ({event_fullname})')
+        return False
+    if event_data['isOnline'] is True:
+        _l.debug(f'SKIPPING - event is online competition ({event_fullname})')
+        return False
+    if event_data['videogame']['id'] != game.sgg_id:
+        _l.debug(f'SKIPPING - game mismatch ({event_fullname})')
+        return False
+    # Skip event with no or little participants
+    if not event_data['numEntrants'] or event_data['numEntrants'] < 10:
+        _l.debug(f'SKIPPING - no or not enough entrants ({event_fullname})')
+        return False
+    return True
