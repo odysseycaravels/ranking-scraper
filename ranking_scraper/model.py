@@ -77,18 +77,19 @@ Base = declarative_base(cls=_Base)
 
 class EventState(Enum):
     UNVERIFIED = 0
-    VERIFIED_DATA_INCOMPLETE = -1  # Some set or player data is missing. This is usually manually fixable.
+    VERIFIED_EMPTY = 1  # Verified but data is not retrieved yet.
+    VERIFIED_DATA_INCOMPLETE = -1  # Some set or player data is missing. Usually manually fixable.
     VERIFIED_OK = 100  # Event set data is retrieved with no issues (or is flagged as being OK).
     IGNORE = -99  # Event is not suitable. Eg. A squad strike event
 
 
-class EventFormat(Enum):
+class EventType(Enum):
     UNKNOWN = 0
     SINGLES = 1
     DOUBLES = 2
 
 
-class EventType(Enum):
+class EventFormat(Enum):
     UNKNOWN = 0
     ELIMINATION = 1  # Includes single + double elim, as well as round-robin
     LADDER = 2
@@ -132,16 +133,20 @@ class Event(Base):
     sets = relationship("Set", back_populates="event")
 
     @property
-    def type(self):
+    def type(self) -> EventType:
         return EventType(self.type_code)
 
     @property
-    def format(self):
+    def format(self) -> EventFormat:
         return EventFormat(self.format_code)
 
     @property
-    def state(self):
-        return EventState(self.state_code).name
+    def state(self) -> EventState:
+        return EventState(self.state_code)
+
+    @state.setter
+    def state(self, new_state: EventState):
+        self.state_code = new_state.value
 
     @property
     def is_populated(self):

@@ -8,7 +8,7 @@ from urllib.error import HTTPError
 from pprint import pprint as pp
 from graphqlclient import GraphQLClient
 
-from ranking_scraper.model import Game, Event, EventState, EventFormat, EventType
+from ranking_scraper.model import Game, Event, EventState, EventType, EventFormat
 from ranking_scraper.smashgg import queries
 from ranking_scraper.config import get_config
 from ranking_scraper.scraper import Scraper
@@ -17,8 +17,9 @@ _l = logging.getLogger(__name__)
 
 SMASHGG_API_ENDPOINT = 'https://api.smash.gg/gql/alpha'
 
-EVENT_TYPE_TO_FORMAT_MAP = {1: EventFormat.SINGLES.value,
-                            5: EventFormat.DOUBLES.value, }
+# Maps smash.gg event type (int) to our internal event type (enum; backed by int).
+EVENT_TYPE_ENUM_MAP = {1: EventType.SINGLES.value,
+                       5: EventType.DOUBLES.value, }
 
 
 class SmashGGScraper(Scraper):
@@ -104,6 +105,19 @@ class SmashGGScraper(Scraper):
 
     # Scraping methods
     def pull_event_data(self, game_code, from_dt, to_dt=None, countries=None):
+        """
+        Retrieve events for a given game in a given time frame.
+
+        Optionally limit the query to a list of countries (defined by country codes).
+
+        This will only retrieve tournament & their events, it will not populate the set data.
+
+        :param game_code:
+        :param from_dt:
+        :param to_dt:
+        :param countries:
+        :return:
+        """
         to_dt = to_dt or datetime.utcnow()
         countries = countries or [None]  # Note: list of None, not just list
         game = self.session.query(Game).filter(Game.code == game_code).one()
@@ -121,6 +135,22 @@ class SmashGGScraper(Scraper):
         self.session.add_all(new_events)
         _l.info('### Populated database with new Event instances ###')
         self.session.commit()
+
+    def populate_event(self, event):
+        """
+        Populates an event's set data.
+
+        Updates the event's format (if possible) and state.
+
+        :param event:
+        :type event: ranking_scraper.model.Event
+        :return:
+        """
+        if not event.state == EventState.VERIFIED_EMPTY:
+            _l.warning(f'Not populating event {event.name}. It is in state {event.state} (expected '
+                       f'{EventState.VERIFIED_EMPTY.name})')
+        _l.debug(f'Populating event {event.name}')
+        pp(event)
 
     def _get_events(self, game, from_dt, to_dt, country_code=None):
         """
@@ -199,8 +229,8 @@ class SmashGGScraper(Scraper):
                                         game=game,
                                         event_fullname=event_fullname):
                 continue
-            event_format_code = EVENT_TYPE_TO_FORMAT_MAP.get(evt_data['type'],
-                                                             EventFormat.UNKNOWN.value)
+            event_format_code = EVENT_TYPE_ENUM_MAP.get(evt_data['type'],
+                                                        EventType.UNKNOWN.value)
             new_event = Event(sgg_tournament_id=tournament_dict['id'],
                               sgg_event_id=evt_data['id'],
                               game_id=game.id,
@@ -209,7 +239,7 @@ class SmashGGScraper(Scraper):
                               num_entrants=evt_data['numEntrants'],
                               end_date=datetime.fromtimestamp(tournament_dict['endAt']),
                               note='Added by SmashGGScraper',
-                              type_code=EventType.UNKNOWN.value,
+                              type_code=EventFormat.UNKNOWN.value,
                               format_code=event_format_code,
                               # TODO: Some events can auto-verify?
                               state_code=EventState.UNVERIFIED.value,
@@ -238,6 +268,7 @@ class SmashGGScraper(Scraper):
                 continue
             new_events.append(evt)
         return new_events
+
 
 def _validate_event_data(event_data, tournament_data, game, event_fullname=None):
     event_fullname = event_fullname or f'{tournament_data["name"]} / {event_data["name"]}'
