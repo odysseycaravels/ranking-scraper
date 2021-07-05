@@ -83,11 +83,13 @@ class EventState(Enum):
 
 
 class EventFormat(Enum):
+    UNKNOWN = 0
     SINGLES = 1
     DOUBLES = 2
 
 
 class EventType(Enum):
+    UNKNOWN = 0
     ELIMINATION = 1  # Includes single + double elim, as well as round-robin
     LADDER = 2
 
