@@ -1,8 +1,9 @@
 from collections import OrderedDict
+from datetime import datetime
 from enum import Enum
 
 from sqlalchemy import Column, Integer, Text, ForeignKey, Float, \
-    DateTime
+    DateTime, TIMESTAMP
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.declarative import declarative_base, declared_attr
 from sqlalchemy.orm import ColumnProperty, relationship
@@ -114,6 +115,7 @@ class Event(Base):
     sgg_event_id = Column(Integer, nullable=True, index=True)  # smashgg event_id
     # Add other providers here (challonge, ...)
     name = Column(Text, nullable=False)
+    created_on = Column("created_on", TIMESTAMP, nullable=False, default=datetime.utcnow)
     note = Column(Text, nullable=True)  # Additional notes that can be given
     country = Column(Text, nullable=True)
     end_date = Column(DateTime, nullable=False)
@@ -208,6 +210,7 @@ class Set(Base):
     A negative score indicates a DQ.
     """
     id = Column(Integer, primary_key=True)
+    created_on = Column("created_on", TIMESTAMP, nullable=False, default=datetime.utcnow)
     order = Column(Integer, nullable=False)  # Order index
 
     event_id = Column(Integer, ForeignKey('event.id'), nullable=False)
