@@ -97,10 +97,12 @@ class EventFormat(Enum):
 
 class SetState(Enum):
     UNVERIFIED = 0  # At least one player is not a verified participant.
-    VERIFIED_OK = 100  # All participants are verified
+    VERIFIED_OK = 100  # All participants are verified accounts
     ANONYMOUS = -1  # At least one player is an anonymous entry and cannot be linked to a Player.
     # Anonymous entries have to be manually fixed.
     IGNORE = -99  # Set is manually designated to be ignored.
+
+# Note: Anonymous are not tied to an account. Unverified are but added by a TO.
 
 
 class Game(Base):
@@ -237,7 +239,7 @@ class Set(Base):
 
     @property
     def state(self):
-        return SetState(self.state_code).name
+        return SetState(self.state_code)
 
 
 class Ranking(Base):
