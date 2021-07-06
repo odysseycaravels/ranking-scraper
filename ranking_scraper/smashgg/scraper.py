@@ -150,7 +150,20 @@ class SmashGGScraper(Scraper):
             _l.warning(f'Not populating event {event.name}. It is in state {event.state} (expected '
                        f'{EventState.VERIFIED_EMPTY.name})')
         _l.debug(f'Populating event {event.name}')
+        # TODO: Continue implementation here
+        _q = queries.get_event_phases(event.sgg_event_id)
+        phase_data = self.submit_request(query=_q)['event']['phases']
         pp(event)
+        pp(phase_data)
+        # Note - BracketType is enum; values found here:
+        # https://developer.smash.gg/reference/brackettype.doc.html
+        _q = queries.get_phase_sets_paging(phase_data[0]['id'])
+        page_data = self.submit_request(query=_q)['phase']['sets']['pageInfo']['totalPages']
+        print(f'Number of phase set pages: {page_data}')
+        _q = queries.get_phase_sets(phase_data[0]['id'], page_nr=1)
+        set_data = self.submit_request(query=_q)['phase']['sets']['nodes']
+        pp(set_data)
+        raise NotImplementedError('To be implemented')
 
     def _get_events(self, game, from_dt, to_dt, country_code=None):
         """

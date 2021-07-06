@@ -170,6 +170,8 @@ class GraphQLField(object):
             result += ", ".join(f'{k}: {self._sanitize_value(v)}' for k, v in value.items())
             result += '}'
             return result
+        if isinstance(value, StringWithoutQuotes):
+            return f'{value.str_value}'
         # Assumed has to be enclosed (eg. for strings, maybe also datetime?)
         return f'"{value}"'
 
@@ -179,6 +181,16 @@ class GraphQLField(object):
         if isinstance(item, str):
             return item in self._fields
         return item in self._fields.values()
+
+
+class StringWithoutQuotes(object):
+    """
+    Special string container to indicate that this value need not be enclosed by quotes.
+
+    This is useful if the query expects an enum value, which are essentially non-enclosed strings.
+    """
+    def __init__(self, value: str):
+        self.str_value = value
 
 
 # Some reference gql queries:

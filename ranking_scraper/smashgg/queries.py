@@ -3,7 +3,7 @@ GraphQL queries in string form used by SmashGGScraper.
 """
 
 # TODO: This is lifted from the old project. Confirm these still work (will need some rework).
-from ranking_scraper.gql_query import GraphQLQuery
+from ranking_scraper.gql_query import GraphQLQuery, StringWithoutQuotes
 
 
 def get_completed_tournaments_paging(game_id, country_code=None, from_date=None, to_date=None,
@@ -186,6 +186,15 @@ query TournamentsAll($afterDate: Timestamp!, $beforeDate: Timestamp!,
 }
 """.strip()
 
+
+def get_event_phases(event_id):
+    query = GraphQLQuery('GetEventPhases')
+    query.f('event').add_params(id=event_id) \
+        .f('phases') \
+        .add_fields('id', 'name', 'numSeeds', 'bracketType')
+    return query
+
+
 EVENT_PHASES = """
 query EventPhases($eventId: ID!) {
   event(id: $eventId) {
@@ -198,6 +207,18 @@ query EventPhases($eventId: ID!) {
   }
 }
 """.strip()
+
+
+def get_phase_sets_paging(phase_id, per_page=40) -> GraphQLQuery:
+    query = GraphQLQuery('GetPhaseSetsPaging')
+    query.f('phase').add_params(id=phase_id) \
+        .add_fields('id', 'name', 'sets')
+    # Note: SortType RECENT per docs is "sorted in order they were started".
+    query.f('phase').f('sets').add_params(perPage=per_page,
+                                          sortType=StringWithoutQuotes('RECENT')) \
+        .f('pageInfo').f('totalPages')
+    return query
+
 
 PHASE_SETS_PAGING = """
 query PhaseSetsPaging($phaseId: ID!, $perPage: Int!) {
@@ -215,6 +236,24 @@ query PhaseSetsPaging($phaseId: ID!, $perPage: Int!) {
   }
 }
 """.strip()
+
+
+def get_phase_sets(phase_id, page_nr, per_page=40) -> GraphQLQuery:
+    query = GraphQLQuery('GetPhaseSetsPaging')
+    query.f('phase').add_params(id=phase_id)
+    # Note: SortType RECENT per docs is "sorted in order they were started".
+    query.f('phase').f('sets').add_params(page=page_nr,
+                                          perPage=per_page,
+                                          sortType=StringWithoutQuotes('RECENT')) \
+        .f('nodes').add_fields('id', 'slots')
+    slots_field = query.f('phase').f('sets').f('nodes').f('slots')
+    slots_field.f('standing').add_fields('placement', 'stats') \
+        .f('stats').f('score').f('value')
+    participants_field = slots_field.f('entrant').f('participants')
+    participants_field.add_fields('gamerTag', 'verified')
+    participants_field.f('user').add_fields('id').f('location').f('country')
+    return query
+
 
 PHASE_SETS = """
 query PhaseSets($phaseId: ID!, $page: Int!, $perPage: Int!) {
