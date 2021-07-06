@@ -6,8 +6,11 @@ import time
 from datetime import datetime
 from urllib.error import HTTPError
 from pprint import pprint as pp
+
+import typing
 from graphqlclient import GraphQLClient
 
+from ranking_scraper.gql_query import GraphQLQuery
 from ranking_scraper.model import Game, Event, EventState, EventType, EventFormat
 from ranking_scraper.smashgg import queries
 from ranking_scraper.config import get_config
@@ -23,7 +26,10 @@ EVENT_TYPE_ENUM_MAP = {1: EventType.SINGLES.value,
 
 
 class SmashGGScraper(Scraper):
-    def __init__(self, session=None, api_token=None, max_requests_per_min=80, object_limit=1000):
+    def __init__(self,
+                 session=None,
+                 api_token: str = None,
+                 max_requests_per_min=80, object_limit=1000):
         super(SmashGGScraper, self).__init__(session=session)
         self._client = GraphQLClient(endpoint=SMASHGG_API_ENDPOINT)
         self._client.inject_token(f'Bearer {api_token or get_config()["smashgg_api_token"]}')
@@ -32,18 +38,12 @@ class SmashGGScraper(Scraper):
         self.object_limit = object_limit
 
     # API interaction
-    def submit_request(self, query, params=None, include_metadata=False):
+    def submit_request(self,
+                       query: GraphQLQuery,
+                       params: dict = None,
+                       include_metadata=False) -> dict:
         """
         Submit a query request to the smash.gg API.
-
-        :param query: The graphQL query GraphQLQuery format.
-        :type query: ranking_scraper.gql_query.GraphQLQuery
-
-        :param params: Optional - Parameters for the request.
-        :type params: dict
-
-        :param include_metadata:
-        :type include_metadata: bool
 
         :return: The response data in dictionary format (parsed as json). The response metadata
          is not returned unless "include_metadata" is set to True. In such a case, any data is
@@ -104,7 +104,11 @@ class SmashGGScraper(Scraper):
                 continue
 
     # Scraping methods
-    def pull_event_data(self, game_code, from_dt, to_dt=None, countries=None):
+    def pull_event_data(self,
+                        game_code: str,
+                        from_dt: datetime,
+                        to_dt: datetime = None,
+                        countries: typing.List[str] = None) -> typing.List[Event]:
         """
         Retrieve events for a given game in a given time frame.
 
@@ -112,11 +116,7 @@ class SmashGGScraper(Scraper):
 
         This will only retrieve tournament & their events, it will not populate the set data.
 
-        :param game_code:
-        :param from_dt:
-        :param to_dt:
-        :param countries:
-        :return:
+        :return: List of new events that have been added.
         """
         to_dt = to_dt or datetime.utcnow()
         countries = countries or [None]  # Note: list of None, not just list
@@ -135,16 +135,13 @@ class SmashGGScraper(Scraper):
         self.session.add_all(new_events)
         _l.info('### Populated database with new Event instances ###')
         self.session.commit()
+        return new_events
 
-    def populate_event(self, event):
+    def populate_event(self, event: Event):
         """
         Populates an event's set data.
 
         Updates the event's format (if possible) and state.
-
-        :param event:
-        :type event: ranking_scraper.model.Event
-        :return:
         """
         if not event.state == EventState.VERIFIED_EMPTY:
             _l.warning(f'Not populating event {event.name}. It is in state {event.state} (expected '

@@ -3,26 +3,16 @@ GraphQL queries in string form used by SmashGGScraper.
 """
 
 # TODO: This is lifted from the old project. Confirm these still work (will need some rework).
+from datetime import datetime
+
 from ranking_scraper.gql_query import GraphQLQuery, StringWithoutQuotes
 
 
-def get_completed_tournaments_paging(game_id, country_code=None, from_date=None, to_date=None,
-                                     items_per_page=25):
-    """
-    :param game_id: Smash.gg game id
-
-    :param country_code: Country code (eg. BE, FR, ...)
-
-    :param from_date: Datetime UNIX timestamp as int. (This particular api does not accept float timestamps).
-    :type from_date: int
-
-    :param to_date: Datetime UNIX timestamp as int. (This particular api does not accept float timestamps).
-    :type to_date: int
-
-    :param items_per_page: Number of items to retrieve per page.
-
-    :rtype: GraphQLQuery
-    """
+def get_completed_tournaments_paging(game_id: int,
+                                     country_code: str = None,
+                                     from_date: int = None,  # Timestamp (no floats)
+                                     to_date: int = None,  # Timestamp (no floats)
+                                     items_per_page=25) -> GraphQLQuery:
     query = GraphQLQuery(query_name='TournamentsPaging')
     # Field definitions
     query.f('tournaments').f('pageInfo').add_fields('totalPages', 'perPage')
@@ -66,8 +56,12 @@ query TournamentsByCountryPaging($countryCode: String!, $afterDate: Timestamp!, 
 """.strip()
 
 
-def get_completed_tournaments(game_id, page_nr, country_code=None, from_date=None, to_date=None,
-                              items_per_page=25):
+def get_completed_tournaments(game_id: int,
+                              page_nr: int,
+                              country_code: str = None,
+                              from_date: int = None,  # Timestamp (no floats)
+                              to_date: int = None,  # Timestamp (no floats)
+                              items_per_page=25) -> GraphQLQuery:
     query = GraphQLQuery(query_name='TournamentsData')
     # Field definitions
     query.f('tournaments').f('nodes').add_fields('id', 'name', 'countryCode', 'endAt', 'events')
@@ -187,7 +181,7 @@ query TournamentsAll($afterDate: Timestamp!, $beforeDate: Timestamp!,
 """.strip()
 
 
-def get_event_phases(event_id):
+def get_event_phases(event_id: int) -> GraphQLQuery:
     query = GraphQLQuery('GetEventPhases')
     query.f('event').add_params(id=event_id) \
         .f('phases') \
@@ -209,7 +203,7 @@ query EventPhases($eventId: ID!) {
 """.strip()
 
 
-def get_phase_sets_paging(phase_id, per_page=40) -> GraphQLQuery:
+def get_phase_sets_paging(phase_id: int, per_page=40) -> GraphQLQuery:
     query = GraphQLQuery('GetPhaseSetsPaging')
     query.f('phase').add_params(id=phase_id) \
         .add_fields('id', 'name', 'sets')
@@ -238,7 +232,7 @@ query PhaseSetsPaging($phaseId: ID!, $perPage: Int!) {
 """.strip()
 
 
-def get_phase_sets(phase_id, page_nr, per_page=40) -> GraphQLQuery:
+def get_phase_sets(phase_id: int, page_nr: int, per_page=40) -> GraphQLQuery:
     query = GraphQLQuery('GetPhaseSetsPaging')
     query.f('phase').add_params(id=phase_id)
     # Note: SortType RECENT per docs is "sorted in order they were started".
@@ -292,3 +286,8 @@ query PhaseSets($phaseId: ID!, $page: Int!, $perPage: Int!) {
   }
 }
 """.strip()
+
+
+# TODO: Implement get player details query
+def get_player_details(player_id: int):
+    raise NotImplementedError('Update player tags and other relevant data')

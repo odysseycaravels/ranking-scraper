@@ -17,7 +17,7 @@ from pprint import pprint as pp
 
 
 class GraphQLQuery(object):
-    def __init__(self, query_name='Query'):
+    def __init__(self, query_name: str = 'Query'):
         """
         :param query_name: Name of the query. Purely for clarity purposes. Default: "Query".
         :type query_name: str
@@ -30,7 +30,7 @@ class GraphQLQuery(object):
         new_instance._fields = {k: fld.clone() for k, fld in self._fields.items()}
         return new_instance
 
-    def build(self):
+    def build(self) -> str:
         """
 
         :return:
@@ -38,7 +38,7 @@ class GraphQLQuery(object):
         """
         return f'query {self.query_name}{{{",".join(f.build() for f in self._fields.values())}}}'
 
-    def field(self, name):
+    def field(self, name: str):
         """
 
         :param name:
@@ -51,7 +51,7 @@ class GraphQLQuery(object):
 
     f = fld = field  # Shortcut definitions
 
-    def fields(self, *field_names):
+    def fields(self, *field_names: str):
         """
         Convenience method to specify multiple fields.
 
@@ -90,7 +90,7 @@ class GraphQLQuery(object):
 
 
 class GraphQLField(object):
-    def __init__(self, field_name):
+    def __init__(self, field_name: str):
         self.name = field_name
         self._fields = dict()
         self.params = dict()
@@ -101,7 +101,7 @@ class GraphQLField(object):
         new_instance.params = copy.deepcopy(self.params)
         return new_instance
 
-    def field(self, name):
+    def field(self, name: str):
         """
         Define a field to be retrieved and returns the representative GraphQLField instance.
 
@@ -115,7 +115,7 @@ class GraphQLField(object):
 
     f = fld = field  # Shortcut definitions
 
-    def add_fields(self, *field_names):
+    def add_fields(self, *field_names: str):
         """
         Convenience method to specify multiple fields.
 
@@ -136,7 +136,7 @@ class GraphQLField(object):
         self.params.update(kwargs)
         return self
 
-    def build(self):
+    def build(self) -> str:
         """
 
         :return:
@@ -152,7 +152,7 @@ class GraphQLField(object):
         result += f'{{{",".join(f.build() for f in self._fields.values())}}}'
         return result
 
-    def _sanitize_value(self, value):
+    def _sanitize_value(self, value) -> str:
         """
         Return the correct string format of a value for use in a GraphQL query string.
         """
@@ -189,6 +189,7 @@ class StringWithoutQuotes(object):
 
     This is useful if the query expects an enum value, which are essentially non-enclosed strings.
     """
+
     def __init__(self, value: str):
         self.str_value = value
 
