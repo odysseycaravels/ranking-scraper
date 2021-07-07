@@ -11,7 +11,7 @@ import typing
 from graphqlclient import GraphQLClient
 
 from ranking_scraper.gql_query import GraphQLQuery
-from ranking_scraper.model import Game, Event, EventState, EventType, EventFormat
+from ranking_scraper.model import Game, Event, EventState, EventType, EventFormat, Set
 from ranking_scraper.smashgg import queries
 from ranking_scraper.config import get_config
 from ranking_scraper.scraper import Scraper
@@ -150,19 +150,17 @@ class SmashGGScraper(Scraper):
         """
         if event.is_populated:
             _l.warning(f'Not populating event {event.name}. It is already populated.')
+        if event.type == EventType.DOUBLES or event.type == EventType.UNKNOWN:
+            error_msg = f'EventType {event.type.name} is currently not supported.'
+            _l.error(error_msg)
+            raise ValueError(error_msg)
         _l.debug(f'Populating event {event.name}')
-        # TODO: Continue implementation here
         _q = queries.get_event_phases(event.sgg_event_id)
-        phase_data = self.submit_request(query=_q)['event']['phases']
-        event.format = _find_event_format(phase_data)  # Update event format
-        pp(event)
-        pp(phase_data)
-        _q = queries.get_phase_sets_paging(phase_data[0]['id'])
-        page_data = self.submit_request(query=_q)['phase']['sets']['pageInfo']['totalPages']
-        print(f'Number of phase set pages: {page_data}')
-        _q = queries.get_phase_sets(phase_data[0]['id'], page_nr=1)
-        set_data = self.submit_request(query=_q)['phase']['sets']['nodes']
-        pp(set_data)
+        phases_data = self.submit_request(query=_q)['event']['phases']
+        event.format = _find_event_format(phases_data)  # Update event format
+        set_dicts = self._get_phase_sets_data(phases_data=phases_data)
+        # TODO: Continue implementation here
+        pp(set_dicts)
         raise NotImplementedError('To be implemented')
 
     def _get_events(self, game: Game, from_dt: datetime, to_dt: datetime,
@@ -257,6 +255,18 @@ class SmashGGScraper(Scraper):
             new_events.append(evt)
         return new_events
 
+    def _get_phase_sets_data(self, phases_data: typing.List[dict]) -> typing.List[dict]:
+        all_sets_data = list()
+        for phase_dict in phases_data:
+            _q = queries.get_phase_sets_paging(phase_dict['id'])
+            page_count = self.submit_request(query=_q)['phase']['sets']['pageInfo']['totalPages']
+            for page_nr in range(1, page_count + 1):
+                _l.debug(f'Retrieving sets page {page_nr} of {page_count}')
+                _q = queries.get_phase_sets(phase_dict['id'], page_nr=page_nr)
+                phase_sets_data = self.submit_request(query=_q)['phase']['sets']['nodes']
+                all_sets_data.extend(phase_sets_data)
+        return all_sets_data
+
 
 def _validate_event_data(event_data, tournament_data, game, event_fullname=None):
     event_fullname = event_fullname or f'{tournament_data["name"]} / {event_data["name"]}'
@@ -279,6 +289,7 @@ def _validate_event_data(event_data, tournament_data, game, event_fullname=None)
 ELIMINATION_FORMATS = {'SINGLE_ELIMINATION', 'DOUBLE_ELIMINATION', 'ROUND_ROBIN', 'SWISS'}
 LADDER_FORMATS = {'MATCHMAKING'}
 UNKNOWN_FORMATS = {'EXHIBITION', 'RACE', 'CUSTOM_SCHEDULE', 'ELIMINATION_ROUND'}  # Not tracked
+
 
 def _find_event_format(event_phases: typing.List[dict]) -> EventFormat:
     bracket_types = set(ph['bracketType'] for ph in event_phases)
