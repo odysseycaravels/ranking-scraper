@@ -3,7 +3,7 @@ from datetime import datetime
 from enum import Enum
 
 from sqlalchemy import Column, Integer, Text, ForeignKey, Float, \
-    DateTime, TIMESTAMP
+    DateTime, TIMESTAMP, Boolean
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.declarative import declarative_base, declared_attr
 from sqlalchemy.orm import ColumnProperty, relationship
@@ -95,16 +95,6 @@ class EventFormat(Enum):
     LADDER = 2
 
 
-class SetState(Enum):
-    UNVERIFIED = 0  # At least one player is not a verified participant.
-    VERIFIED_OK = 100  # All participants are verified accounts
-    ANONYMOUS = -1  # At least one player is an anonymous entry and cannot be linked to a Player.
-    # Anonymous entries have to be manually fixed.
-    IGNORE = -99  # Set is manually designated to be ignored.
-
-# Note: Anonymous are not tied to an account. Unverified are but added by a TO.
-
-
 class Game(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     sgg_id = Column(Integer, nullable=True, index=True)
@@ -160,7 +150,7 @@ class Event(Base):
         return len(self.sets) > 0
 
 
-# TODO: Need a way to merge player instances + a way to track that so it doesn't get rescraped.
+# TODO: Need a way to merge player instances + a way to track that so it doesn't get re-scraped.
 #  Useful for: Multiple accounts for 1 person. To verify an anon entry.
 class Player(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -190,7 +180,7 @@ class Player(Base):
     @property
     def verified_sets(self):
         """ Returns all sets that are verified. """
-        return [s for s in self.sets if s.format == SetState.VERIFIED_OK]
+        return [s for s in self.sets if s.is_verified]
 
     @property
     def is_anonymous(self):
@@ -235,17 +225,21 @@ class Set(Base):
     winning_player = relationship("Player", foreign_keys=[winning_player_id],
                                   back_populates="won_sets")
     winning_score = Column(Integer, nullable=False)
+    winning_player_is_verified = Column(Boolean, nullable=False)
 
     losing_player_id = Column(Integer, ForeignKey('player.id'), nullable=False)
     losing_player = relationship("Player", foreign_keys=[losing_player_id],
                                  back_populates="lost_sets")
     losing_score = Column(Integer, nullable=False)
-
-    state_code = Column(Integer, nullable=False)
+    losing_player_is_verified = Column(Boolean, nullable=False)
 
     @property
-    def state(self):
-        return SetState(self.state_code)
+    def is_verified(self):
+        """ Whether both players are verified and non-anonymous entrants. """
+        return self.winning_player_is_verified and \
+               not self.winning_player.is_anonymous and \
+               self.losing_player_is_verified and \
+               not self.losing_player.is_anonymous
 
 
 class Ranking(Base):
