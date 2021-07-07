@@ -148,19 +148,21 @@ class SmashGGScraper(Scraper):
 
         Updates the event's format and state.
         """
+        _l.debug(f'Populating event {event.name}')
         if event.is_populated:
             _l.warning(f'Not populating event {event.name}. It is already populated.')
         if event.type == EventType.DOUBLES or event.type == EventType.UNKNOWN:
             error_msg = f'EventType {event.type.name} is currently not supported.'
             _l.error(error_msg)
             raise ValueError(error_msg)
-        _l.debug(f'Populating event {event.name}')
         _q = queries.get_event_phases(event.sgg_event_id)
         phases_data = self.submit_request(query=_q)['event']['phases']
         event.format = _find_event_format(phases_data)  # Update event format
         set_dicts = self._get_phase_sets_data(phases_data=phases_data)
+        sets = self._create_sets_from_set_dicts(event=event, set_dicts=set_dicts)
         # TODO: Continue implementation here
-        pp(set_dicts)
+        pp(sets)
+        pp(len(sets))
         raise NotImplementedError('To be implemented')
 
     def _get_events(self, game: Game, from_dt: datetime, to_dt: datetime,
@@ -223,8 +225,7 @@ class SmashGGScraper(Scraper):
                                         game=game,
                                         event_fullname=event_fullname):
                 continue
-            event_format_code = EVENT_TYPE_ENUM_MAP.get(evt_data['type'],
-                                                        EventType.UNKNOWN.value)
+            event_type_code = EVENT_TYPE_ENUM_MAP.get(evt_data['type'], EventType.UNKNOWN.value)
             new_event = Event(sgg_tournament_id=tournament_dict['id'],
                               sgg_event_id=evt_data['id'],
                               game_id=game.id,
@@ -233,9 +234,8 @@ class SmashGGScraper(Scraper):
                               num_entrants=evt_data['numEntrants'],
                               end_date=datetime.fromtimestamp(tournament_dict['endAt']),
                               note='Added by SmashGGScraper',
-                              type_code=EventFormat.UNKNOWN.value,
-                              format_code=event_format_code,
-                              # TODO: Some events can auto-verify?
+                              format_code=EventFormat.UNKNOWN.value,
+                              type_code=event_type_code,
                               state_code=EventState.UNVERIFIED.value,
                               )
             new_events.append(new_event)
@@ -266,6 +266,19 @@ class SmashGGScraper(Scraper):
                 phase_sets_data = self.submit_request(query=_q)['phase']['sets']['nodes']
                 all_sets_data.extend(phase_sets_data)
         return all_sets_data
+
+    def _create_sets_from_set_dicts(self,
+                                    event: Event,
+                                    set_dicts: typing.List[dict]) -> typing.List[Set]:
+        """
+        Creates Set and Player instances from given data for a specific Event.
+
+        Players are tied to existing players if possible. If no Player instance is found, a new
+        Player instance is created. This also extends to anonymous entries.
+
+        If a player is unverified, it is marked as such on the set.
+        """
+        pass
 
 
 def _validate_event_data(event_data, tournament_data, game, event_fullname=None):
