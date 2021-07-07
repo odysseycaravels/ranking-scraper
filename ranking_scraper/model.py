@@ -215,6 +215,7 @@ class Set(Base):
     A negative score indicates a DQ.
     """
     id = Column(Integer, primary_key=True)
+    sgg_id = Column(Integer, nullable=True, index=True)  # smashgg set_id
     created_on = Column("created_on", TIMESTAMP, nullable=False, default=datetime.utcnow)
     order = Column(Integer, nullable=False)  # Order index
 
