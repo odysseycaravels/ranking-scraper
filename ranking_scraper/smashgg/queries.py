@@ -233,7 +233,7 @@ query PhaseSetsPaging($phaseId: ID!, $perPage: Int!) {
 
 
 def get_phase_sets(phase_id: int, page_nr: int, per_page=40) -> GraphQLQuery:
-    query = GraphQLQuery('GetPhaseSetsPaging')
+    query = GraphQLQuery('GetPhaseSets')
     query.f('phase').add_params(id=phase_id)
     # Note: SortType RECENT per docs is "sorted in order they were started".
     query.f('phase').f('sets').add_params(page=page_nr,
