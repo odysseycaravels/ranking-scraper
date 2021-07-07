@@ -29,7 +29,8 @@ class SmashGGScraper(Scraper):
     def __init__(self,
                  session=None,
                  api_token: str = None,
-                 max_requests_per_min=80, object_limit=1000):
+                 max_requests_per_min=80,
+                 object_limit=1000):
         super(SmashGGScraper, self).__init__(session=session)
         self._client = GraphQLClient(endpoint=SMASHGG_API_ENDPOINT)
         self._client.inject_token(f'Bearer {api_token or get_config()["smashgg_api_token"]}')
@@ -61,8 +62,12 @@ class SmashGGScraper(Scraper):
             _l.error(f'Result did not contain "data" key. Result is: {result}')
             raise
 
-    def _execute_request(self, query, params=None, max_retries=5, initial_wait_time=1.5,
-                         max_wait_time=60.0):
+    def _execute_request(self,
+                         query: str,
+                         params=None,
+                         max_retries: int = 5,
+                         initial_wait_time: int or float = 1.5,
+                         max_wait_time: int or float = 60.0):
         """
         Executes the graphQL request with exponential back-off.
 
@@ -141,19 +146,17 @@ class SmashGGScraper(Scraper):
         """
         Populates an event's set data.
 
-        Updates the event's format (if possible) and state.
+        Updates the event's format and state.
         """
-        if not event.state == EventState.VERIFIED_EMPTY:
-            _l.warning(f'Not populating event {event.name}. It is in state {event.state} (expected '
-                       f'{EventState.VERIFIED_EMPTY.name})')
+        if event.is_populated:
+            _l.warning(f'Not populating event {event.name}. It is already populated.')
         _l.debug(f'Populating event {event.name}')
         # TODO: Continue implementation here
         _q = queries.get_event_phases(event.sgg_event_id)
         phase_data = self.submit_request(query=_q)['event']['phases']
+        event.format = _find_event_format(phase_data)  # Update event format
         pp(event)
         pp(phase_data)
-        # Note - BracketType is enum; values found here:
-        # https://developer.smash.gg/reference/brackettype.doc.html
         _q = queries.get_phase_sets_paging(phase_data[0]['id'])
         page_data = self.submit_request(query=_q)['phase']['sets']['pageInfo']['totalPages']
         print(f'Number of phase set pages: {page_data}')
@@ -162,26 +165,14 @@ class SmashGGScraper(Scraper):
         pp(set_data)
         raise NotImplementedError('To be implemented')
 
-    def _get_events(self, game, from_dt, to_dt, country_code=None):
+    def _get_events(self, game: Game, from_dt: datetime, to_dt: datetime,
+                    country_code: str = None) -> typing.List[Event]:
         """
         Fetches all events for a game from a specific time period.
 
         Optionally limits the retrieval to a specific country.
 
-        :param game:
-        :type game: ranking_scraper.model.Game
-
-        :param from_dt:
-        :type from_dt: datetime.datetime
-
-        :param to_dt:
-        :type to_dt: datetime.datetime
-
-        :param country_code:
-        :type country_code: str
-
         :return: A dictionary of events found in all tournaments that match the given criteria.
-        :rtype: list[Event]
         """
         from_dt = int(from_dt.timestamp())
         to_dt = int(to_dt.timestamp())
@@ -214,17 +205,12 @@ class SmashGGScraper(Scraper):
         new_events = [_ for _ in itertools.chain(*events_list)]
         return new_events
 
-    def _create_events_from_tournament_dict(self, tournament_dict, game):
-        """
-
-        :param tournament_dict:
-        :param game:
-        :return:
-        :rtype: typing.List[Event]
-        """
+    def _create_events_from_tournament_dict(self,
+                                            tournament_dict: dict,
+                                            game: Game) -> typing.List[Event]:
         new_events = list()
         for evt_data in tournament_dict['events']:
-            event_fullname = f'{tournament_dict["name"]} / {evt_data["name"]}'
+            event_fullname = f'{tournament_dict["name"]} | {evt_data["name"]}'
             if evt_data['state'] != 'COMPLETED':
                 _l.debug(f'SKIPPING - event not completed ({event_fullname})')
                 continue
@@ -257,15 +243,7 @@ class SmashGGScraper(Scraper):
             new_events.append(new_event)
         return new_events
 
-    def _filter_out_known_events(self, events):
-        """
-
-        :param events:
-        :type events: typing.List[Event]
-
-        :return:
-        :rtype: typing.List[Event]
-        """
+    def _filter_out_known_events(self, events: typing.List[Event]) -> typing.List[Event]:
         new_events = list()
         tournament_ids = [evt.sgg_tournament_id for evt in events]
         known_events = self.session.query(Event) \
@@ -296,3 +274,18 @@ def _validate_event_data(event_data, tournament_data, game, event_fullname=None)
         _l.debug(f'SKIPPING - no or not enough entrants ({event_fullname})')
         return False
     return True
+
+
+ELIMINATION_FORMATS = {'SINGLE_ELIMINATION', 'DOUBLE_ELIMINATION', 'ROUND_ROBIN', 'SWISS'}
+LADDER_FORMATS = {'MATCHMAKING'}
+UNKNOWN_FORMATS = {'EXHIBITION', 'RACE', 'CUSTOM_SCHEDULE', 'ELIMINATION_ROUND'}  # Not tracked
+
+def _find_event_format(event_phases: typing.List[dict]) -> EventFormat:
+    bracket_types = set(ph['bracketType'] for ph in event_phases)
+    if all(_ in ELIMINATION_FORMATS for _ in bracket_types):
+        return EventFormat.ELIMINATION
+    if all(_ in LADDER_FORMATS for _ in bracket_types):
+        return EventFormat.LADDER
+    if all(_ in UNKNOWN_FORMATS for _ in bracket_types):
+        return EventFormat.UNKNOWN
+    return EventFormat.UNKNOWN  # Not sure if technically possible to have a mix?

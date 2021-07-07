@@ -77,9 +77,9 @@ Base = declarative_base(cls=_Base)
 
 class EventState(Enum):
     UNVERIFIED = 0
-    VERIFIED_EMPTY = 1  # Verified but data is not retrieved yet.
     VERIFIED_DATA_INCOMPLETE = -1  # Some set or player data is missing. Usually manually fixable.
-    VERIFIED_OK = 100  # Event set data is retrieved with no issues (or is flagged as being OK).
+    VERIFIED_MANUAL_OK = 10  # Manually set as complete.
+    VERIFIED_OK = 100  # Event set data is fully complete.
     IGNORE = -99  # Event is not suitable. Eg. A squad strike event
 
 
@@ -142,6 +142,10 @@ class Event(Base):
     def format(self) -> EventFormat:
         return EventFormat(self.format_code)
 
+    @format.setter
+    def format(self, new_format: EventFormat):
+        self.format_code = new_format.value
+
     @property
     def state(self) -> EventState:
         return EventState(self.state_code)
@@ -156,6 +160,8 @@ class Event(Base):
         return len(self.sets) > 0
 
 
+# TODO: Need a way to merge player instances + a way to track that so it doesn't get rescraped.
+#  Useful for: Multiple accounts for 1 person. To verify an anon entry.
 class Player(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     sgg_id = Column(Integer, nullable=True, index=True)
