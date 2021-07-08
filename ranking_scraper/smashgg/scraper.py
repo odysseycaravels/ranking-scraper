@@ -151,9 +151,11 @@ class SmashGGScraper(Scraper):
         _l.info(f'Populating event {event.name}')
         if event.is_populated:
             _l.warning(f'Not populating event {event.name}. It is already populated.')
+            return list()
         if event.type == EventType.DOUBLES or event.type == EventType.UNKNOWN:
             error_msg = f'SKIPPING - EventType {event.type.name} is currently not supported.'
             _l.warning(error_msg)
+            return list()
         _q = queries.get_event_phases(event.sgg_event_id)
         phases_data = self.submit_request(query=_q)['event']['phases']
         event.format = _find_event_format(phases_data)  # Update event format
