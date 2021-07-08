@@ -323,9 +323,10 @@ class SmashGGScraper(Scraper):
             if user['id'] in known_players:
                 return known_players[user['id']]  # Return stored player
             # Create new tracked Player
+            country = user['location']['country'] if user['location'] else None
             new_player = Player(sgg_id=user['id'],
                                 name=participant_data['gamerTag'],
-                                country=user['location']['country'])  # country can be None (is ok)
+                                country=country)  # country can be None (is ok)
             self.session.add(new_player)
             return new_player
         # else: this is an anonymous entry
