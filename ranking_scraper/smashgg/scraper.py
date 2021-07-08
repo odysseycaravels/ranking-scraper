@@ -1,17 +1,15 @@
-import copy
 import itertools
 import json
 import logging
 import time
 from datetime import datetime
 from urllib.error import HTTPError
-from pprint import pprint as pp
 
 import typing
 from graphqlclient import GraphQLClient
 
 from ranking_scraper.gql_query import GraphQLQuery
-from ranking_scraper.model import Game, Event, EventState, EventType, EventFormat, Set
+from ranking_scraper.model import Game, Event, EventState, EventType, EventFormat, Set, Player
 from ranking_scraper.smashgg import queries
 from ranking_scraper.config import get_config
 from ranking_scraper.scraper import Scraper
@@ -142,13 +140,15 @@ class SmashGGScraper(Scraper):
         self.session.commit()
         return new_events
 
-    def populate_event(self, event: Event):
+    def populate_event(self, event: Event) -> typing.List[Set]:
         """
         Populates an event's set data.
 
         Updates the event's format and state.
+
+        :return: The list of created Sets.
         """
-        _l.debug(f'Populating event {event.name}')
+        _l.info(f'Populating event {event.name}')
         if event.is_populated:
             _l.warning(f'Not populating event {event.name}. It is already populated.')
         if event.type == EventType.DOUBLES or event.type == EventType.UNKNOWN:
@@ -160,10 +160,9 @@ class SmashGGScraper(Scraper):
         event.format = _find_event_format(phases_data)  # Update event format
         set_dicts = self._get_phase_sets_data(phases_data=phases_data)
         sets = self._create_sets_from_set_dicts(event=event, set_dicts=set_dicts)
-        # TODO: Continue implementation here
-        pp(sets)
-        pp(len(sets))
-        raise NotImplementedError('To be implemented')
+        self.session.add_all(sets)
+        self.session.commit()
+        return sets
 
     def _get_events(self, game: Game, from_dt: datetime, to_dt: datetime,
                     country_code: str = None) -> typing.List[Event]:
@@ -264,7 +263,15 @@ class SmashGGScraper(Scraper):
                 _l.debug(f'Retrieving sets page {page_nr} of {page_count}')
                 _q = queries.get_phase_sets(phase_dict['id'], page_nr=page_nr)
                 phase_sets_data = self.submit_request(query=_q)['phase']['sets']['nodes']
+                # CALL_ORDER returns in reverse order when an event is completed
+                # see: https://developer.smash.gg/reference/setsorttype.doc.html
                 all_sets_data.extend(phase_sets_data)
+        total_set_count = len(all_sets_data)
+        # Filter out DQ sets
+        all_sets_data = [sd for sd in all_sets_data if not _set_data_contains_dq(sd)]
+        _l.debug(f'Filtered out {total_set_count - len(all_sets_data)} sets with DQs.')
+        # sortType doesn't seem to be reliable. Sorting ourselves to be sure.
+        all_sets_data = sorted(all_sets_data, key=lambda sd: sd['startedAt'] or 0)
         return all_sets_data
 
     def _create_sets_from_set_dicts(self,
@@ -278,7 +285,57 @@ class SmashGGScraper(Scraper):
 
         If a player is unverified, it is marked as such on the set.
         """
-        pass
+        known_set_ids = [data[0] for data in self.session.query(Set.sgg_id).all()]
+        new_set_dicts = [set_data for set_data in set_dicts if set_data['id'] not in known_set_ids]
+        _l.info(f'Processing {len(new_set_dicts)} sets. ({len(set_dicts) - len(new_set_dicts)} '
+                f'sets are being skipped (IDs are already present in the system).')
+        new_sets = list()
+        # Track anonymous players from this tournament
+        anonymous_players = dict()  # type: typing.Dict[str, Player]
+        for idx, set_data in enumerate(new_set_dicts):
+            winning_slot, losing_slot = sorted(set_data['slots'],
+                                               key=lambda d: d['standing']['placement'])
+            # TODO: If we support teams, participants will have to be handled differently.
+            winner = self._get_player_for_participant(winning_slot['entrant']['participants'][0],
+                                                      anonymous_players_map=anonymous_players)
+            loser = self._get_player_for_participant(losing_slot['entrant']['participants'][0],
+                                                     anonymous_players_map=anonymous_players)
+            new_set = Set(
+                sgg_id=set_data['id'],
+                order=idx,  # Sets are ordered by call order (startedAt); see above
+                event=event,
+                winning_player=winner,
+                winning_score=winning_slot['standing']['stats']['score']['value'],
+                winning_player_is_verified=winning_slot['entrant']['participants'][0]['verified'],
+                losing_player=loser,
+                losing_score=losing_slot['standing']['stats']['score']['value'],
+                losing_player_is_verified=losing_slot['entrant']['participants'][0]['verified'])
+            new_sets.append(new_set)
+        return new_sets
+
+    def _get_player_for_participant(self,
+                                    participant_data,
+                                    anonymous_players_map: typing.Dict[str, Player]) -> Player:
+        # TODO: Will this cause a new query each time? Might have to disable flush for this.
+        known_players = self.session.query(Player).filter(Player.sgg_id != None).all()
+        known_players = {p.sgg_id: p for p in known_players if p.sgg_id}
+        user = participant_data['user']
+        if user and user['id']:
+            if user['id'] in known_players:
+                return known_players[user['id']]  # Return stored player
+            # Create new tracked Player
+            new_player = Player(sgg_id=user['id'],
+                                name=participant_data['gamerTag'],
+                                country=user['location']['country'])  # country can be None (is ok)
+            self.session.add(new_player)
+            return new_player
+        # else: this is an anonymous entry
+        tag = participant_data['gamerTag']
+        if tag not in anonymous_players_map:
+            anon_player = Player(sgg_id=None, name=tag)
+            self.session.add(anon_player)
+            anonymous_players_map[tag] = anon_player
+        return anonymous_players_map[tag]
 
 
 def _validate_event_data(event_data, tournament_data, game, event_fullname=None):
@@ -313,3 +370,11 @@ def _find_event_format(event_phases: typing.List[dict]) -> EventFormat:
     if all(_ in UNKNOWN_FORMATS for _ in bracket_types):
         return EventFormat.UNKNOWN
     return EventFormat.UNKNOWN  # Not sure if technically possible to have a mix?
+
+
+def _set_data_contains_dq(set_data: dict) -> bool:
+    """ Returns True if set_data contains at least one DQ'd player. """
+    for entrant in set_data['slots']:
+        if entrant['standing']['stats']['score']['value'] < 0:  # DQ = -1:
+            return True
+    return False

@@ -239,7 +239,7 @@ def get_phase_sets(phase_id: int, page_nr: int, per_page=40) -> GraphQLQuery:
     query.f('phase').f('sets').add_params(page=page_nr,
                                           perPage=per_page,
                                           sortType=StringWithoutQuotes('RECENT')) \
-        .f('nodes').add_fields('id', 'slots')
+        .f('nodes').add_fields('id', 'slots', 'startedAt')
     slots_field = query.f('phase').f('sets').f('nodes').f('slots')
     slots_field.f('standing').add_fields('placement', 'stats') \
         .f('stats').f('score').f('value')
