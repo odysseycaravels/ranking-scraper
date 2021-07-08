@@ -149,6 +149,11 @@ class Event(Base):
         """ Whether the sets from this event have been retrieved. """
         return len(self.sets) > 0
 
+    @property
+    def verified_sets(self):
+        """ Return all the sets of this event that are verified. """
+        return [set_ for set_ in self.sets if set_.is_verified]
+
 
 # TODO: Need a way to merge player instances + a way to track that so it doesn't get re-scraped.
 #  Useful for: Multiple accounts for 1 person. To verify an anon entry.
