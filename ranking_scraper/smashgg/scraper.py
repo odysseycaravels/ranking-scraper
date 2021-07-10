@@ -377,6 +377,8 @@ def _find_event_format(event_phases: typing.List[dict]) -> EventFormat:
 def _set_data_contains_dq(set_data: dict) -> bool:
     """ Returns True if set_data contains at least one DQ'd player. """
     for entrant in set_data['slots']:
+        if entrant['standing']['stats']['score']['value'] is None:
+            return True
         if entrant['standing']['stats']['score']['value'] < 0:  # DQ = -1:
             return True
     return False
