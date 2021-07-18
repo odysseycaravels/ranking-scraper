@@ -165,6 +165,9 @@ class SmashGGScraper(Scraper):
         self.session.commit()
         return sets
 
+    def populate_events(self, events: typing.List[Event]) -> typing.List[Set]:
+        return list(itertools.chain(*(self.populate_event(_e) for _e in events)))
+
     def _get_events(self, game: Game, from_dt: datetime, to_dt: datetime,
                     country_code: str = None) -> typing.List[Event]:
         """

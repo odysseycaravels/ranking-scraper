@@ -272,14 +272,14 @@ class RankingPeriod(Base):
     ranking_id = Column(Integer, ForeignKey('ranking.id'), nullable=True)
     ranking = relationship("Ranking")
 
-    prev_ranking_id = Column(Integer, ForeignKey('ranking_period.id'), nullable=True)
-    previous_ranking = relationship("RankingPeriod")
+    previous_period_id = Column(Integer, ForeignKey('ranking_period.id'), nullable=True)
+    previous_period = relationship("RankingPeriod")
 
     # TODO: start_date can be inferred from previous ranking?
     # TODO: name can be generated as "ranking.name [start_date - end_date]".
 
 
-class PlayerRanking(Base):
+class PlayerRating(Base):
     """
     A player's score and metadata at a given ranking's time.
 
@@ -287,6 +287,9 @@ class PlayerRanking(Base):
     exposed a JSONB field.
     """
     id = Column(Integer, primary_key=True, autoincrement=True)
-    score = Column(Float, nullable=False)
+    rating = Column(Float, nullable=False)
     # Algorithm-specific metadata. Eg. K-values for ELO. RD for glicko, etc...
     algorithm_params = Column(JSONB, default=dict)  # Non-mutable. Must assign to field.
+
+    ranking_period_id = Column(Integer, ForeignKey('ranking_period.id'), nullable=True)
+    ranking_period = relationship("RankingPeriod")
